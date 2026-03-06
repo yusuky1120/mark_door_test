@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdoor Todo App</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; background:#f6f7fb; color:#222; }
+      .container { width: min(900px, 94vw); margin: 40px auto; background:white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.08); padding: 24px; }
+      h1 { margin-top: 0; }
+      form, .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+      input, textarea, button, select { font-size: 14px; padding: 8px 10px; border-radius: 6px; border: 1px solid #c9ced8; }
+      input, textarea { flex: 1; }
+      button { background: #2b69ff; color: white; border: none; cursor: pointer; }
+      button.secondary { background: #eef1ff; color: #2b69ff; }
+      button.danger { background: #e94949; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { border: 1px solid #e5e7ef; border-radius: 8px; margin-bottom: 10px; padding: 12px; display: grid; gap: 8px; }
+      .task-header { display:flex; justify-content: space-between; align-items: center; gap: 12px; }
+      .title.done { text-decoration: line-through; color: #7a7f88; }
+      .muted { color:#777; font-size: 12px; }
+      .task-actions { display:flex; gap:8px; flex-wrap: wrap; }
+      .toast { margin-bottom: 12px; padding: 10px; border-radius: 6px; display:none; }
+      .toast.success { background:#ebfff2; color:#0a7a2b; display:block; }
+      .toast.error { background:#ffecec; color:#a51717; display:block; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Todo管理アプリ</h1>
+      <div id="toast" class="toast"></div>
+
+      <form id="task-form">
+        <input id="title" placeholder="タイトル（必須）" required />
+        <input id="description" placeholder="詳細（任意）" />
+        <button type="submit">タスク追加</button>
+      </form>
+
+      <div class="filters">
+        <label for="filter">表示:</label>
+        <select id="filter">
+          <option value="all">全て</option>
+          <option value="incomplete">未完了</option>
+          <option value="complete">完了済み</option>
+        </select>
+      </div>
+
+      <ul id="task-list"></ul>
+    </div>
+
+    <script>
+      const taskList = document.getElementById('task-list');
+      const taskForm = document.getElementById('task-form');
+      const filter = document.getElementById('filter');
+      const toast = document.getElementById('toast');
+
+      function showToast(message, type = 'success') {
+        toast.textContent = message;
+        toast.className = `toast ${type}`;
+        setTimeout(() => (toast.className = 'toast'), 2200);
+      }
+
+      async function fetchTasks() {
+        const selected = filter.value;
+        const query = selected === 'all' ? '' : `?completed=${selected === 'complete'}`;
+        const res = await fetch(`/api/tasks${query}`);
+        const tasks = await res.json();
+        renderTasks(tasks);
+      }
+
+      function renderTasks(tasks) {
+        taskList.innerHTML = '';
+        for (const task of tasks) {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="task-header">
+              <strong class="title ${task.completed ? 'done' : ''}">${task.title}</strong>
+              <span class="muted">作成: ${new Date(task.created_at).toLocaleString()}</span>
+            </div>
+            <div>${task.description || ''}</div>
+            <div class="task-actions">
+              <button class="secondary" data-action="toggle">${task.completed ? '未完了に戻す' : '完了にする'}</button>
+              <button class="secondary" data-action="edit">編集</button>
+              <button class="danger" data-action="delete">削除</button>
+            </div>
+          `;
+
+          li.querySelector('[data-action="toggle"]').onclick = async () => {
+            await fetch(`/api/tasks/${task.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ completed: !task.completed }),
+            });
+            showToast('状態を更新しました');
+            fetchTasks();
+          };
+
+          li.querySelector('[data-action="edit"]').onclick = async () => {
+            const newTitle = prompt('新しいタイトル', task.title);
+            if (newTitle === null) return;
+            const newDescription = prompt('新しい詳細', task.description || '');
+            const res = await fetch(`/api/tasks/${task.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: newTitle, description: newDescription }),
+            });
+            if (!res.ok) {
+              const err = await res.json();
+              showToast(err.detail || '更新に失敗しました', 'error');
+              return;
+            }
+            showToast('タスクを更新しました');
+            fetchTasks();
+          };
+
+          li.querySelector('[data-action="delete"]').onclick = async () => {
+            if (!confirm('このタスクを削除しますか？')) return;
+            await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+            showToast('タスクを削除しました');
+            fetchTasks();
+          };
+
+          taskList.appendChild(li);
+        }
+      }
+
+      taskForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('title').value;
+        const description = document.getElementById('description').value;
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          showToast(err.detail || '作成に失敗しました', 'error');
+          return;
+        }
+        taskForm.reset();
+        showToast('タスクを作成しました');
+        fetchTasks();
+      };
+
+      filter.onchange = fetchTasks;
+      fetchTasks();
+    </script>
+  </body>
+</html>
