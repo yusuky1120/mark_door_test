@@ -68,6 +68,13 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
+## Dockerでの起動
+
+### build & run
+
+```bash
+docker compose up --build
+
 ## 設計メモ
 
 - `app/main.py` に **アプリ生成関数 (`create_app`)** を置き、テスト時にDBを差し替えられる構成。
